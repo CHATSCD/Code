@@ -23,6 +23,14 @@ export interface MysqlConfig {
 
 export type ConnectionConfig = SqliteConfig | PostgresConfig | MysqlConfig;
 
+export type ConnectionSourceKind = 'native' | 'excel' | 'google-sheets';
+
+export interface ConnectionSourceMeta {
+  spreadsheetId?: string;
+  spreadsheetUrl?: string;
+  fileName?: string;
+}
+
 export interface Connection {
   id: string;
   name: string;
@@ -30,6 +38,8 @@ export interface Connection {
   config: ConnectionConfig;
   isSample: boolean;
   createdAt: string;
+  sourceKind: ConnectionSourceKind;
+  sourceMeta: ConnectionSourceMeta | null;
 }
 
 export interface ColumnSchema {
@@ -59,6 +69,13 @@ export interface ProviderSettings {
   baseUrl?: string;
   model: string;
   configured: boolean;
+}
+
+export interface GoogleAccountStatus {
+  configured: boolean;
+  connected: boolean;
+  email: string;
+  redirectUri: string;
 }
 
 export interface ChatSession {

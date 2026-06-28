@@ -5,6 +5,8 @@ import { encryptSecret, decryptSecret } from '../crypto';
 import type {
   Connection,
   ConnectionConfig,
+  ConnectionSourceKind,
+  ConnectionSourceMeta,
   DbType,
   ChatSession,
   ChatMessage,
@@ -54,6 +56,16 @@ function getDb(): Database.Database {
       created_at TEXT NOT NULL
     );
   `);
+
+  const connectionCols = db.prepare('PRAGMA table_info(connections)').all() as { name: string }[];
+  const colNames = new Set(connectionCols.map((c) => c.name));
+  if (!colNames.has('source_kind')) {
+    db.exec("ALTER TABLE connections ADD COLUMN source_kind TEXT NOT NULL DEFAULT 'native'");
+  }
+  if (!colNames.has('source_meta')) {
+    db.exec('ALTER TABLE connections ADD COLUMN source_meta TEXT');
+  }
+
   return db;
 }
 
@@ -75,7 +87,8 @@ export function createConnection(
   name: string,
   type: DbType,
   config: ConnectionConfig,
-  isSample = false
+  isSample = false,
+  source?: { kind: ConnectionSourceKind; meta?: ConnectionSourceMeta }
 ): Connection {
   const conn: Connection = {
     id: uuidv4(),
@@ -84,12 +97,23 @@ export function createConnection(
     config,
     isSample,
     createdAt: new Date().toISOString(),
+    sourceKind: source?.kind ?? 'native',
+    sourceMeta: source?.meta ?? null,
   };
   getDb()
     .prepare(
-      'INSERT INTO connections (id, name, type, config, is_sample, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+      'INSERT INTO connections (id, name, type, config, is_sample, created_at, source_kind, source_meta) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     )
-    .run(conn.id, conn.name, conn.type, JSON.stringify(conn.config), isSample ? 1 : 0, conn.createdAt);
+    .run(
+      conn.id,
+      conn.name,
+      conn.type,
+      JSON.stringify(conn.config),
+      isSample ? 1 : 0,
+      conn.createdAt,
+      conn.sourceKind,
+      conn.sourceMeta ? JSON.stringify(conn.sourceMeta) : null
+    );
   return conn;
 }
 
@@ -111,6 +135,8 @@ function rowToConnection(row: any): Connection {
     config: JSON.parse(row.config),
     isSample: !!row.is_sample,
     createdAt: row.created_at,
+    sourceKind: (row.source_kind as ConnectionSourceKind) || 'native',
+    sourceMeta: row.source_meta ? JSON.parse(row.source_meta) : null,
   };
 }
 
@@ -254,4 +280,72 @@ function rowToMessage(row: any): ChatMessage {
     error: row.error,
     createdAt: row.created_at,
   };
+}
+
+// ---------- Google OAuth (Sheets access) ----------
+
+const GOOGLE_CLIENT_KEY = 'google_oauth_client';
+const GOOGLE_TOKENS_KEY = 'google_oauth_tokens';
+
+export interface GoogleOAuthClientConfig {
+  clientId: string;
+  clientSecret: string;
+}
+
+export interface GoogleTokens {
+  accessToken: string;
+  refreshToken: string;
+  expiryDate: number;
+  email: string;
+}
+
+function readSetting(key: string): any | null {
+  const row = getDb().prepare('SELECT value FROM settings WHERE key = ?').get(key) as { value: string } | undefined;
+  return row ? JSON.parse(row.value) : null;
+}
+
+function writeSetting(key: string, value: unknown): void {
+  getDb()
+    .prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+    .run(key, JSON.stringify(value));
+}
+
+export function getGoogleOAuthClientConfig(): GoogleOAuthClientConfig {
+  const parsed = readSetting(GOOGLE_CLIENT_KEY);
+  if (!parsed) return { clientId: '', clientSecret: '' };
+  return {
+    clientId: parsed.clientId || '',
+    clientSecret: parsed.clientSecret ? decryptSecret(parsed.clientSecret) : '',
+  };
+}
+
+export function saveGoogleOAuthClientConfig(config: { clientId: string; clientSecret: string }): void {
+  writeSetting(GOOGLE_CLIENT_KEY, {
+    clientId: config.clientId,
+    clientSecret: config.clientSecret ? encryptSecret(config.clientSecret) : '',
+  });
+}
+
+export function getGoogleTokens(): GoogleTokens {
+  const parsed = readSetting(GOOGLE_TOKENS_KEY);
+  if (!parsed) return { accessToken: '', refreshToken: '', expiryDate: 0, email: '' };
+  return {
+    accessToken: parsed.accessToken ? decryptSecret(parsed.accessToken) : '',
+    refreshToken: parsed.refreshToken ? decryptSecret(parsed.refreshToken) : '',
+    expiryDate: parsed.expiryDate || 0,
+    email: parsed.email || '',
+  };
+}
+
+export function saveGoogleTokens(tokens: GoogleTokens): void {
+  writeSetting(GOOGLE_TOKENS_KEY, {
+    accessToken: tokens.accessToken ? encryptSecret(tokens.accessToken) : '',
+    refreshToken: tokens.refreshToken ? encryptSecret(tokens.refreshToken) : '',
+    expiryDate: tokens.expiryDate,
+    email: tokens.email,
+  });
+}
+
+export function clearGoogleTokens(): void {
+  getDb().prepare('DELETE FROM settings WHERE key = ?').run(GOOGLE_TOKENS_KEY);
 }

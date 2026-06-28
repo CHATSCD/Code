@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { ProviderSettingsCard } from '@/components/settings/ProviderSettingsCard';
 import { ConnectionsCard } from '@/components/settings/ConnectionsCard';
+import { GoogleAccountCard } from '@/components/settings/GoogleAccountCard';
 
 export default function SettingsPage() {
   return (
@@ -15,6 +16,7 @@ export default function SettingsPage() {
         <div className="flex flex-col gap-6">
           <ConnectionsCard />
           <ProviderSettingsCard />
+          <GoogleAccountCard />
         </div>
       </div>
     </main>

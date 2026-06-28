@@ -6,7 +6,7 @@ import { Card } from '../ui/Card';
 import { Input, Label } from '../ui/Input';
 import type { Connection } from '@/types';
 
-type Tab = 'sample' | 'upload' | 'postgres' | 'mysql';
+type Tab = 'sample' | 'upload' | 'google-sheets' | 'postgres' | 'mysql';
 
 export function ConnectStep({ onConnected }: { onConnected: (connection: Connection) => void }) {
   const [tab, setTab] = useState<Tab>('sample');
@@ -16,6 +16,8 @@ export function ConnectStep({ onConnected }: { onConnected: (connection: Connect
 
   const [pg, setPg] = useState({ name: '', host: 'localhost', port: '5432', database: '', user: '', password: '' });
   const [my, setMy] = useState({ name: '', host: 'localhost', port: '3306', database: '', user: '', password: '' });
+  const [sheetUrl, setSheetUrl] = useState('');
+  const [sheetName, setSheetName] = useState('');
 
   async function useSample() {
     setLoading(true);
@@ -43,10 +45,33 @@ export function ConnectStep({ onConnected }: { onConnected: (connection: Connect
     try {
       const form = new FormData();
       form.append('file', file);
-      form.append('name', file.name.replace(/\.(sqlite3?|db3?)$/i, ''));
+      form.append('name', file.name.replace(/\.(sqlite3?|db3?|xlsx?|xls)$/i, ''));
       const res = await fetch('/api/connections/upload', { method: 'POST', body: form });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Upload failed.');
+      onConnected(data.connection);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function importGoogleSheet() {
+    if (!sheetUrl.trim()) {
+      setError('Paste a Google Sheets URL or ID first.');
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/connections/google-sheets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: sheetUrl, name: sheetName }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Import failed.');
       onConnected(data.connection);
     } catch (err) {
       setError((err as Error).message);
@@ -94,7 +119,8 @@ export function ConnectStep({ onConnected }: { onConnected: (connection: Connect
         {(
           [
             ['sample', 'Try a sample database'],
-            ['upload', 'Upload a SQLite file'],
+            ['upload', 'Upload a file'],
+            ['google-sheets', 'Google Sheets'],
             ['postgres', 'PostgreSQL'],
             ['mysql', 'MySQL'],
           ] as [Tab, string][]
@@ -129,15 +155,47 @@ export function ConnectStep({ onConnected }: { onConnected: (connection: Connect
 
         {tab === 'upload' && (
           <div>
-            <p className="text-sm text-slate-600">Have a SQLite database file (.sqlite, .db) on this device? Upload it.</p>
+            <p className="text-sm text-slate-600">
+              Have a SQLite database (.sqlite, .db) or an Excel spreadsheet (.xlsx, .xls) on this device? Upload it.
+              Each sheet in an Excel file becomes its own table you can query.
+            </p>
             <input
               ref={fileInputRef}
               type="file"
-              accept=".sqlite,.sqlite3,.db,.db3"
+              accept=".sqlite,.sqlite3,.db,.db3,.xlsx,.xls"
               className="mt-3 block w-full text-sm text-slate-600"
             />
             <Button className="mt-4" onClick={uploadFile} loading={loading}>
               Upload &amp; connect
+            </Button>
+          </div>
+        )}
+
+        {tab === 'google-sheets' && (
+          <div>
+            <p className="text-sm text-slate-600">
+              Import a Google Sheet as a queryable database. Connect your Google account first in{' '}
+              <a href="/settings" className="text-brand-600 hover:underline">
+                Settings
+              </a>
+              , then paste the spreadsheet link below. Each tab becomes its own table.
+            </p>
+            <div className="mt-3 grid gap-3">
+              <div>
+                <Label>Connection name (optional)</Label>
+                <Input value={sheetName} onChange={(e) => setSheetName(e.target.value)} placeholder="My spreadsheet" />
+              </div>
+              <div>
+                <Label>Google Sheets URL or ID</Label>
+                <Input
+                  value={sheetUrl}
+                  onChange={(e) => setSheetUrl(e.target.value)}
+                  placeholder="https://docs.google.com/spreadsheets/d/..."
+                />
+              </div>
+            </div>
+            <Button className="mt-4" onClick={importGoogleSheet} loading={loading}>
+              Import &amp; connect
             </Button>
           </div>
         )}

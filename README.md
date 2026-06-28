@@ -15,7 +15,9 @@ Nothing platform-specific is required — there's no separate native build.
 
 - **Zero-config trial** — spin up a bundled sample SQLite shop database and start chatting immediately, no setup required.
 - **Bring your own database** — connect PostgreSQL or MySQL, or upload a SQLite file.
-- **Bring your own AI** — use OpenAI, Anthropic, or any OpenAI-compatible endpoint (e.g. a local model via Ollama/LM Studio). API keys are encrypted at rest.
+- **Excel import & export** — upload an `.xlsx`/`.xls` file (each sheet becomes its own queryable table) and export any chat result back to a downloadable Excel file.
+- **Google Sheets import & export** — sign in with your own Google account to import a spreadsheet as a queryable database, or export any chat result as a brand-new Google Sheet.
+- **Bring your own AI** — use OpenAI, Anthropic, Mistral, or any OpenAI-compatible endpoint (e.g. a local model via Ollama/LM Studio). API keys are encrypted at rest.
 - **Guided onboarding** — a short wizard walks you through connecting a database and configuring an AI provider.
 - **Safe by default** — every AI-generated query is validated to be a single read-only `SELECT`/`WITH` statement before it ever touches your data. DDL/DML, multiple statements, and inline comments are rejected.
 - **Plain-language answers** — after running a query, the assistant explains the results in natural language, not just a raw table.
@@ -35,8 +37,8 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000). On first run you'll land in the onboarding wizard:
 
-1. **Connect a database** — try the built-in sample database, upload a SQLite file, or connect to PostgreSQL/MySQL.
-2. **Configure an AI provider** — enter an API key for OpenAI or Anthropic, or point at any OpenAI-compatible endpoint (including a local model server). You can skip this step and configure it later from Settings.
+1. **Connect a database** — try the built-in sample database, upload a SQLite or Excel file, import a Google Sheet, or connect to PostgreSQL/MySQL.
+2. **Configure an AI provider** — enter an API key for OpenAI, Anthropic, or Mistral, or point at any OpenAI-compatible endpoint (including a local model server). You can skip this step and configure it later from Settings.
 3. **Start chatting** — ask questions about your data in plain English.
 
 ### Production build
@@ -61,6 +63,37 @@ npm run typecheck  # TypeScript, no emit
 4. **Execution** — the query runs against your database with a row cap (200 rows by default) so large result sets don't overwhelm the chat or the AI provider.
 5. **Summarization** — the results are sent back to the AI provider, which explains them in plain language. The full SQL and result table are also shown, so you can verify exactly what ran.
 
+## Excel and Google Sheets
+
+Both work as data sources you can chat against, and as export targets for any chat result. Under the hood, each sheet/tab is converted into a regular SQLite table in a local file, so the entire chat → SQL → safety-guard → execution pipeline above works identically regardless of where the data came from.
+
+### Excel
+
+- **Import**: in the connect-a-database step (onboarding or Settings → Databases → Add database), choose "Upload a file" and pick an `.xlsx`/`.xls` file. Each sheet becomes its own table; column types (text/integer/decimal) are inferred automatically.
+- **Export**: under any chat result table, click "Export to Excel" to download the visible rows as a `.xlsx` file.
+
+### Google Sheets
+
+Importing/exporting Google Sheets uses your own Google account via OAuth — ChatData never sees your Google password, and only ever requests access to Sheets (no Drive/Gmail/etc. access).
+
+To enable it:
+
+1. In the [Google Cloud Console](https://console.cloud.google.com/), create (or pick) a project and enable the **Google Sheets API**.
+2. Configure an OAuth consent screen (External is fine for personal use; add yourself as a test user if it stays in "Testing" mode).
+3. Create an **OAuth client ID** of type "Web application".
+4. Go to ChatData's Settings page — the "Google Sheets" card shows the exact redirect URI to use (it's `<your app's URL>/api/auth/google/callback`, e.g. `http://localhost:3000/api/auth/google/callback` for local dev). Add it under "Authorized redirect URIs" on the OAuth client, then save.
+5. Copy the client's ID and secret into the "Google Sheets" card in ChatData Settings and save.
+6. Click "Connect Google account" and sign in. You'll be redirected back to Settings showing "Connected as <your email>".
+
+Once connected:
+
+- **Import**: in the connect-a-database step, choose "Google Sheets" and paste the spreadsheet's URL (or just its ID). Each tab becomes its own table.
+- **Export**: under any chat result table, click "Export to Google Sheets" to create a brand-new spreadsheet populated with that result and open it in a new tab.
+
+The OAuth client secret and access/refresh tokens are encrypted at rest the same way AI provider API keys are. Disconnect at any time from the same Settings card.
+
+> Note: the OAuth consent screen itself (the page Google shows you to approve access) can only be completed in a real browser with a registered redirect URI — it can't be exercised in an automated/headless test. Everything else — saving client credentials, the authorization redirect, error handling when not configured/connected, importing/exporting spreadsheets once connected, and the full Excel import/export path — has been tested directly.
+
 ## Data and storage
 
 - App data (your saved connections, chat history, encrypted provider settings, and uploaded/sample SQLite files) lives in a local `data/` directory created next to the project, and is never sent anywhere except to the AI provider you configure.
@@ -73,16 +106,22 @@ npm run typecheck  # TypeScript, no emit
 ```
 src/
   app/                  Next.js App Router pages and API routes
-    api/connections/    Manage database connections (CRUD, sample DB, file upload, schema)
+    api/connections/    Manage database connections (CRUD, sample DB, file/Excel upload, Google Sheets import, schema)
     api/settings/       AI provider configuration and connectivity test
+    api/google/         Google OAuth client config, account status, disconnect
+    api/auth/google/    Google OAuth authorization-code redirect + callback
+    api/export/         Export a chat result to .xlsx or a new Google Sheet
     api/chat/           Chat sessions and messages
     onboarding/         Setup wizard
     chat/               Main chat UI
-    settings/           Manage connections and AI provider after setup
+    settings/           Manage connections, AI provider, and Google account after setup
   components/           UI components (chat, onboarding, settings, shared ui/)
   lib/
     db/                 App-local storage (better-sqlite3) and database connectors (SQLite/Postgres/MySQL)
-    llm/                AI provider clients (OpenAI, Anthropic, OpenAI-compatible) and prompt building
+    llm/                AI provider clients (OpenAI, Anthropic, Mistral, OpenAI-compatible) and prompt building
+    google/             Google OAuth client and Sheets API helpers
+    excel.ts            Excel (.xlsx/.xls) parsing and generation
+    tabular-import.ts   Materializes parsed sheets/tabs into a local SQLite file
     chat-engine.ts      Orchestrates the question -> SQL -> execution -> answer flow
     sql-guard.ts        Read-only SQL enforcement
     crypto.ts           Secret encryption at rest
