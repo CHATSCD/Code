@@ -51,7 +51,7 @@ export interface QueryResult {
   truncated: boolean;
 }
 
-export type LlmProviderKind = 'openai' | 'anthropic' | 'openai-compatible';
+export type LlmProviderKind = 'openai' | 'anthropic' | 'mistral' | 'openai-compatible';
 
 export interface ProviderSettings {
   provider: LlmProviderKind;

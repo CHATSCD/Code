@@ -9,6 +9,7 @@ import type { LlmProviderKind } from '@/types';
 const PROVIDER_LABELS: Record<LlmProviderKind, string> = {
   openai: 'OpenAI',
   anthropic: 'Anthropic (Claude)',
+  mistral: 'Mistral',
   'openai-compatible': 'Local / custom (OpenAI-compatible)',
 };
 

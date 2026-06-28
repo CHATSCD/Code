@@ -20,6 +20,13 @@ const PROVIDER_INFO: Record<LlmProviderKind, { label: string; modelPlaceholder: 
     keyHint: 'Find your key at console.anthropic.com',
     needsKey: true,
   },
+  mistral: {
+    label: 'Mistral',
+    modelPlaceholder: 'e.g. mistral-small-latest',
+    defaultModel: 'mistral-small-latest',
+    keyHint: 'Find your key at console.mistral.ai/api-keys',
+    needsKey: true,
+  },
   'openai-compatible': {
     label: 'Local / custom (Ollama, LM Studio, etc.)',
     modelPlaceholder: 'e.g. llama3.1',
