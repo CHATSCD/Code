@@ -1,10 +1,24 @@
 import crypto from 'crypto';
 import fs from 'fs';
-import { ensureDataDirs, SECRET_KEY_PATH } from './paths';
+import { ensureDataDirs, SECRET_KEY_PATH, IS_SERVERLESS_DB } from './paths';
 
 const ALGO = 'aes-256-gcm';
 
+function getKeyFromEnv(): Buffer {
+  const key = Buffer.from(process.env.ENCRYPTION_KEY as string, 'base64');
+  if (key.length !== 32) {
+    throw new Error(
+      'ENCRYPTION_KEY must be a base64-encoded 32-byte key. Generate one with `openssl rand -base64 32`.'
+    );
+  }
+  return key;
+}
+
 function getKey(): Buffer {
+  if (process.env.ENCRYPTION_KEY) return getKeyFromEnv();
+  if (IS_SERVERLESS_DB) {
+    throw new Error('ENCRYPTION_KEY is required when DATABASE_URL is set. Generate one with `openssl rand -base64 32`.');
+  }
   ensureDataDirs();
   if (!fs.existsSync(SECRET_KEY_PATH)) {
     const key = crypto.randomBytes(32);

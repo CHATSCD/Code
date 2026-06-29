@@ -4,7 +4,7 @@ import { getLlmClient, LlmError } from '@/lib/llm';
 import { jsonError } from '@/lib/api-utils';
 
 export async function POST() {
-  const settings = getProviderSettings();
+  const settings = await getProviderSettings();
   if (!settings.configured) return jsonError('Provider is not configured yet.');
 
   const llm = getLlmClient(settings);

@@ -5,12 +5,14 @@ export interface SqliteConfig {
 }
 
 export interface PostgresConfig {
-  host: string;
-  port: number;
-  database: string;
-  user: string;
-  password: string;
+  host?: string;
+  port?: number;
+  database?: string;
+  user?: string;
+  password?: string;
   ssl?: boolean;
+  useAppDatabase?: boolean;
+  schema?: string;
 }
 
 export interface MysqlConfig {

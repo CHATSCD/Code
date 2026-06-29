@@ -9,22 +9,22 @@ export async function POST(req: NextRequest) {
   const message = (body?.message as string | undefined)?.trim();
   if (!sessionId || !message) return jsonError('sessionId and message are required.');
 
-  const session = getSession(sessionId);
+  const session = await getSession(sessionId);
   if (!session) return jsonError('Session not found.', 404);
-  const connection = getConnection(session.connectionId);
+  const connection = await getConnection(session.connectionId);
   if (!connection) return jsonError('Connection not found.', 404);
 
-  const priorMessages = listMessages(sessionId);
-  const userMessage = addMessage(sessionId, 'user', message);
+  const priorMessages = await listMessages(sessionId);
+  const userMessage = await addMessage(sessionId, 'user', message);
 
   if (priorMessages.length === 0) {
-    renameSession(sessionId, message.length > 60 ? `${message.slice(0, 57)}...` : message);
+    await renameSession(sessionId, message.length > 60 ? `${message.slice(0, 57)}...` : message);
   }
 
-  const settings = getProviderSettings();
+  const settings = await getProviderSettings();
   const outcome = await answerQuestion(connection, settings, priorMessages, message);
 
-  const assistantMessage = addMessage(sessionId, 'assistant', outcome.content, {
+  const assistantMessage = await addMessage(sessionId, 'assistant', outcome.content, {
     sql: outcome.sql,
     result: outcome.result,
     error: outcome.error,

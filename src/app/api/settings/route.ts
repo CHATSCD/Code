@@ -4,7 +4,7 @@ import { jsonError } from '@/lib/api-utils';
 import type { LlmProviderKind } from '@/types';
 
 export async function GET() {
-  const settings = getProviderSettings();
+  const settings = await getProviderSettings();
   return NextResponse.json({
     provider: settings.provider,
     baseUrl: settings.baseUrl || '',
@@ -27,13 +27,13 @@ export async function POST(req: NextRequest) {
 
   if (!provider || !model) return jsonError('provider and model are required.');
 
-  const existing = getProviderSettings();
+  const existing = await getProviderSettings();
   const finalApiKey = apiKey && apiKey.trim() ? apiKey.trim() : existing.apiKey;
 
   if (!finalApiKey && provider !== 'openai-compatible') {
     return jsonError('An API key is required for this provider.');
   }
 
-  saveProviderSettings({ provider, apiKey: finalApiKey, baseUrl: baseUrl?.trim(), model: model.trim() });
+  await saveProviderSettings({ provider, apiKey: finalApiKey, baseUrl: baseUrl?.trim(), model: model.trim() });
   return NextResponse.json({ ok: true });
 }

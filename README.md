@@ -65,7 +65,7 @@ npm run typecheck  # TypeScript, no emit
 
 ## Excel and Google Sheets
 
-Both work as data sources you can chat against, and as export targets for any chat result. Under the hood, each sheet/tab is converted into a regular SQLite table in a local file, so the entire chat → SQL → safety-guard → execution pipeline above works identically regardless of where the data came from.
+Both work as data sources you can chat against, and as export targets for any chat result. Under the hood, each sheet/tab is converted into a regular table — in a local SQLite file by default, or in a dedicated Postgres schema when running in [serverless mode](#deploying-to-vercel) — so the entire chat → SQL → safety-guard → execution pipeline above works identically regardless of where the data came from.
 
 ### Excel
 
@@ -96,10 +96,28 @@ The OAuth client secret and access/refresh tokens are encrypted at rest the same
 
 ## Data and storage
 
-- App data (your saved connections, chat history, encrypted provider settings, and uploaded/sample SQLite files) lives in a local `data/` directory created next to the project, and is never sent anywhere except to the AI provider you configure.
+ChatData runs in one of two storage modes, chosen automatically by whether a `DATABASE_URL` environment variable is set:
+
+- **Local mode (default, no `DATABASE_URL`)** — the zero-config experience above. App data (your saved connections, chat history, encrypted provider settings, and uploaded/sample SQLite files) lives in a local `data/` directory created next to the project, and is never sent anywhere except to the AI provider you configure. This requires a writable, persistent local disk, so it only works for `npm run dev`/`npm run start` on your own machine or a traditional always-on server — not on serverless platforms like Vercel, whose deployed function bundle is read-only.
+- **Serverless mode (`DATABASE_URL` set)** — for deploying to Vercel or any other serverless host. App data and all materialized imports (sample database, Excel/Google Sheets/SQLite uploads) are stored in the Postgres database at `DATABASE_URL` instead of local files: app state lives in a few tables, and each import gets its own Postgres schema (e.g. `imp_<id>`, `sample_shop`). Any standard Postgres connection string works — Supabase, Neon, Vercel Postgres, etc. See [Deploying to Vercel](#deploying-to-vercel) below.
+
+In both modes:
+
 - Database passwords are masked in the UI and API responses.
-- AI provider API keys are encrypted at rest (AES-256-GCM) using a key generated on first run and stored locally.
+- AI provider API keys, the Google OAuth client secret, and Google access/refresh tokens are encrypted at rest (AES-256-GCM).
 - Connecting to your own PostgreSQL/MySQL/SQLite database only grants ChatData read access at the application layer (the SQL guard) — for full protection, also use a database role with read-only permissions.
+
+## Deploying to Vercel
+
+Vercel's deployed functions run on a read-only filesystem, so local mode's `data/` directory won't work there — you'll see an `ENOENT: no such file or directory, mkdir '/var/task/data'` error if you deploy without configuring serverless mode first. To deploy, set two environment variables in your Vercel project (Settings → Environment Variables):
+
+- **`DATABASE_URL`** — a Postgres connection string (any provider works: [Supabase](https://supabase.com), [Neon](https://neon.tech), Vercel Postgres, etc.). This switches the app into serverless mode automatically.
+- **`ENCRYPTION_KEY`** — a base64-encoded 32-byte key used to encrypt secrets at rest, generated with:
+  ```bash
+  openssl rand -base64 32
+  ```
+
+Both are required together in serverless mode — without `ENCRYPTION_KEY`, the app would otherwise try to fall back to writing a key file to local disk, which fails for the same read-only-filesystem reason. Generate your own value; never reuse an example key.
 
 ## Project structure
 

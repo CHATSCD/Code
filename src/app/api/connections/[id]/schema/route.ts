@@ -5,7 +5,7 @@ import { jsonError } from '@/lib/api-utils';
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const connection = getConnection(id);
+  const connection = await getConnection(id);
   if (!connection) return jsonError('Connection not found.', 404);
 
   const connector = getConnector(connection);

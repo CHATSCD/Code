@@ -5,7 +5,7 @@ import { jsonError, toSafeConnection } from '@/lib/api-utils';
 import type { DbType } from '@/types';
 
 export async function GET() {
-  const connections = listConnections().map(toSafeConnection);
+  const connections = (await listConnections()).map(toSafeConnection);
   return NextResponse.json({ connections });
 }
 
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     if (!config[field]) return jsonError(`Missing field: ${field}`);
   }
 
-  const connection = createConnection(name, type, config, false);
+  const connection = await createConnection(name, type, config, false);
 
   try {
     const connector = getConnector(connection);
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
     await connector.close();
   } catch (err) {
     const { deleteConnection } = await import('@/lib/db/app-db');
-    deleteConnection(connection.id);
+    await deleteConnection(connection.id);
     return jsonError(`Could not connect: ${(err as Error).message}`, 422);
   }
 

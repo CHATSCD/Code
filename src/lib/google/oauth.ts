@@ -11,8 +11,8 @@ export const GOOGLE_SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'o
 
 type OAuth2Client = InstanceType<typeof google.auth.OAuth2>;
 
-export function buildAuthUrl(redirectUri: string): string {
-  const cfg = getGoogleOAuthClientConfig();
+export async function buildAuthUrl(redirectUri: string): Promise<string> {
+  const cfg = await getGoogleOAuthClientConfig();
   if (!cfg.clientId || !cfg.clientSecret) {
     throw new Error('Set up your Google OAuth client ID and secret first.');
   }
@@ -25,14 +25,14 @@ export function buildAuthUrl(redirectUri: string): string {
 }
 
 export async function exchangeCodeForTokens(code: string, redirectUri: string): Promise<void> {
-  const cfg = getGoogleOAuthClientConfig();
+  const cfg = await getGoogleOAuthClientConfig();
   if (!cfg.clientId || !cfg.clientSecret) {
     throw new Error('Set up your Google OAuth client ID and secret first.');
   }
   const client = new google.auth.OAuth2(cfg.clientId, cfg.clientSecret, redirectUri);
   const { tokens } = await client.getToken(code);
   const email = decodeEmailFromIdToken(tokens.id_token);
-  saveGoogleTokens({
+  await saveGoogleTokens({
     accessToken: tokens.access_token || '',
     refreshToken: tokens.refresh_token || '',
     expiryDate: tokens.expiry_date || 0,
@@ -41,8 +41,8 @@ export async function exchangeCodeForTokens(code: string, redirectUri: string): 
 }
 
 export async function getAuthorizedClient(): Promise<OAuth2Client> {
-  const cfg = getGoogleOAuthClientConfig();
-  const tokens = getGoogleTokens();
+  const cfg = await getGoogleOAuthClientConfig();
+  const tokens = await getGoogleTokens();
   if (!cfg.clientId || !cfg.clientSecret || !tokens.refreshToken) {
     throw new Error('Connect your Google account in Settings first.');
   }
@@ -58,14 +58,14 @@ export async function getAuthorizedClient(): Promise<OAuth2Client> {
       refreshToken: newTokens.refresh_token || tokens.refreshToken,
       expiryDate: newTokens.expiry_date || tokens.expiryDate,
       email: tokens.email,
-    });
+    }).catch((err) => console.error('Failed to persist refreshed Google tokens', err));
   });
   return client;
 }
 
-export function getGoogleAccountStatus(redirectUri: string): GoogleAccountStatus {
-  const cfg = getGoogleOAuthClientConfig();
-  const tokens = getGoogleTokens();
+export async function getGoogleAccountStatus(redirectUri: string): Promise<GoogleAccountStatus> {
+  const cfg = await getGoogleOAuthClientConfig();
+  const tokens = await getGoogleTokens();
   return {
     configured: !!cfg.clientId && !!cfg.clientSecret,
     connected: !!tokens.refreshToken,
@@ -74,8 +74,8 @@ export function getGoogleAccountStatus(redirectUri: string): GoogleAccountStatus
   };
 }
 
-export function disconnectGoogle(): void {
-  clearGoogleTokens();
+export async function disconnectGoogle(): Promise<void> {
+  await clearGoogleTokens();
 }
 
 function decodeEmailFromIdToken(idToken?: string | null): string {

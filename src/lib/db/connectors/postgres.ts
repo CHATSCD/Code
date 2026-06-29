@@ -1,21 +1,26 @@
 import { Pool } from 'pg';
 import type { PostgresConfig, QueryResult, TableSchema, ColumnSchema } from '@/types';
 import { DEFAULT_MAX_ROWS, type DbConnector } from './types';
+import { assertSafeIdentifier } from '@/lib/db/identifier';
 
 export class PostgresConnector implements DbConnector {
   private pool: Pool;
+  private schema: string;
 
   constructor(config: PostgresConfig) {
-    this.pool = new Pool({
-      host: config.host,
-      port: config.port,
-      database: config.database,
-      user: config.user,
-      password: config.password,
-      ssl: config.ssl ? { rejectUnauthorized: false } : undefined,
-      max: 3,
-      statement_timeout: 15_000,
-    });
+    this.schema = assertSafeIdentifier(config.schema || 'public');
+    this.pool = config.useAppDatabase
+      ? new Pool({ connectionString: process.env.DATABASE_URL, max: 3, statement_timeout: 15_000 })
+      : new Pool({
+          host: config.host,
+          port: config.port,
+          database: config.database,
+          user: config.user,
+          password: config.password,
+          ssl: config.ssl ? { rejectUnauthorized: false } : undefined,
+          max: 3,
+          statement_timeout: 15_000,
+        });
   }
 
   dialect(): 'postgresql' {
@@ -29,8 +34,9 @@ export class PostgresConnector implements DbConnector {
   async getSchema(): Promise<TableSchema[]> {
     const tablesRes = await this.pool.query<{ table_name: string }>(
       `SELECT table_name FROM information_schema.tables
-       WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
-       ORDER BY table_name`
+       WHERE table_schema = $1 AND table_type = 'BASE TABLE'
+       ORDER BY table_name`,
+      [this.schema]
     );
 
     const tables: TableSchema[] = [];
@@ -42,17 +48,17 @@ export class PostgresConnector implements DbConnector {
       }>(
         `SELECT column_name, data_type, is_nullable
          FROM information_schema.columns
-         WHERE table_schema = 'public' AND table_name = $1
+         WHERE table_schema = $1 AND table_name = $2
          ORDER BY ordinal_position`,
-        [table_name]
+        [this.schema, table_name]
       );
       const pkRes = await this.pool.query<{ column_name: string }>(
         `SELECT kcu.column_name
          FROM information_schema.table_constraints tc
          JOIN information_schema.key_column_usage kcu
            ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
-         WHERE tc.table_schema = 'public' AND tc.table_name = $1 AND tc.constraint_type = 'PRIMARY KEY'`,
-        [table_name]
+         WHERE tc.table_schema = $1 AND tc.table_name = $2 AND tc.constraint_type = 'PRIMARY KEY'`,
+        [this.schema, table_name]
       );
       const pkSet = new Set(pkRes.rows.map((r) => r.column_name));
       const columns: ColumnSchema[] = colsRes.rows.map((c) => ({
@@ -61,7 +67,8 @@ export class PostgresConnector implements DbConnector {
         nullable: c.is_nullable === 'YES',
         isPrimaryKey: pkSet.has(c.column_name),
       }));
-      tables.push({ name: table_name, columns });
+      const name = this.schema === 'public' ? table_name : `"${this.schema}"."${table_name}"`;
+      tables.push({ name, columns });
     }
     return tables;
   }

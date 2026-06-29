@@ -4,7 +4,7 @@ import { buildAuthUrl } from '@/lib/google/oauth';
 export async function GET(req: NextRequest) {
   const redirectUri = `${req.nextUrl.origin}/api/auth/google/callback`;
   try {
-    const url = buildAuthUrl(redirectUri);
+    const url = await buildAuthUrl(redirectUri);
     return NextResponse.redirect(url);
   } catch (err) {
     const settingsUrl = new URL('/settings', req.nextUrl.origin);
